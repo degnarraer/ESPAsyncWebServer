@@ -1,17 +1,1 @@
-set(COMPONENT_SRCDIRS
-    "src"
-)
-
-set(COMPONENT_ADD_INCLUDEDIRS
-    "src"
-)
-
-set(COMPONENT_REQUIRES
-    "arduino-esp32"
-    "AsyncTCP"
-)
-
-register_component()
-
-target_compile_definitions(${COMPONENT_TARGET} PUBLIC -DESP32)
-target_compile_options(${COMPONENT_TARGET} PRIVATE -fno-rtti)
+idf_component_register(SRCS src/AsyncEventSource.cpp  src/AsyncWebSocket.cpp  src/SPIFFSEditor.cpp  src/WebAuthentication.cpp  src/WebHandlers.cpp  src/WebRequest.cpp  src/WebResponses.cpp  src/WebServer.cpp INCLUDE_DIRS src REQUIRES arduino-esp32 AsyncTCP wifi_provisioning)
