@@ -53,7 +53,6 @@ AsyncWebServerRequest::AsyncWebServerRequest(AsyncWebServer* s, AsyncClient* c)
   , _expectingContinue(false)
   , _contentLength(0)
   , _parsedLength(0)
-  , _headers(LinkedList<AsyncWebHeader *>([](AsyncWebHeader *h){ delete h; }))
   , _params(LinkedList<AsyncWebParameter *>([](AsyncWebParameter *p){ delete p; }))
   , _pathParams(LinkedList<String *>([](String *p){ delete p; }))
   , _multiParseState(0)
@@ -78,12 +77,12 @@ AsyncWebServerRequest::AsyncWebServerRequest(AsyncWebServer* s, AsyncClient* c)
 }
 
 AsyncWebServerRequest::~AsyncWebServerRequest(){
-  _headers.free();
+  _headers.clear();
 
   _params.free();
   _pathParams.free();
 
-  _interestingHeaders.free();
+  _interestingHeaders.clear();
 
   if(_response != NULL){
     delete _response;
@@ -179,11 +178,21 @@ void AsyncWebServerRequest::_onData(void *buf, size_t len){
 }
 
 void AsyncWebServerRequest::_removeNotInterestingHeaders(){
-  if (_interestingHeaders.containsIgnoreCase("ANY")) return; // nothing to do
-  for(const auto& header: _headers){
-      if(!_interestingHeaders.containsIgnoreCase(header->name().c_str())){
-        _headers.remove(header);
-      }
+  if (std::any_of(std::begin(_interestingHeaders), std::end(_interestingHeaders),
+      [](const String &str){ return str.equalsIgnoreCase("ANY"); }))
+      return; // nothing to do
+
+  for(auto iter = std::begin(_headers); iter != std::end(_headers); )
+  {
+      Serial.print("printing name: ");
+      const auto name = iter->name();
+      Serial.println(name);
+
+      if (std::none_of(std::begin(_interestingHeaders), std::end(_interestingHeaders),
+                       [&name](const String &str){ return str.equalsIgnoreCase(name); }))
+          iter = _headers.erase(iter);
+      else
+          iter++;
   }
 }
 
@@ -345,7 +354,7 @@ bool AsyncWebServerRequest::_parseReqHeader(){
         }
       }
     }
-    _headers.add(new AsyncWebHeader(name, value));
+    _headers.emplace_back(name, value);
   }
   _temp = String();
   return true;
@@ -586,12 +595,12 @@ void AsyncWebServerRequest::_parseLine(){
 }
 
 size_t AsyncWebServerRequest::headers() const{
-  return _headers.length();
+  return _headers.size();
 }
 
 bool AsyncWebServerRequest::hasHeader(const String& name) const {
   for(const auto& h: _headers){
-    if(h->name().equalsIgnoreCase(name)){
+    if(h.name().equalsIgnoreCase(name)){
       return true;
     }
   }
@@ -618,32 +627,64 @@ bool AsyncWebServerRequest::hasHeader(const __FlashStringHelper * data) const {
   }
 }
 
-AsyncWebHeader* AsyncWebServerRequest::getHeader(const String& name) const {
-  for(const auto& h: _headers){
-    if(h->name().equalsIgnoreCase(name)){
-      return h;
-    }
-  }
-  return nullptr;
+AsyncWebHeader* AsyncWebServerRequest::getHeader(const String& name) {
+  auto iter = std::find_if(std::begin(_headers), std::end(_headers),
+                           [&name](const auto &header){ return header.name().equalsIgnoreCase(name); });
+
+  if (iter == std::end(_headers))
+        return nullptr;
+
+  return &(*iter);
 }
 
-AsyncWebHeader* AsyncWebServerRequest::getHeader(const __FlashStringHelper * data) const {
+const AsyncWebHeader* AsyncWebServerRequest::getHeader(const String& name) const {
+  auto iter = std::find_if(std::begin(_headers), std::end(_headers),
+                           [&name](const auto &header){ return header.name().equalsIgnoreCase(name); });
+
+  if (iter == std::end(_headers))
+        return nullptr;
+
+  return &(*iter);
+}
+
+AsyncWebHeader* AsyncWebServerRequest::getHeader(const __FlashStringHelper * data) {
   PGM_P p = reinterpret_cast<PGM_P>(data);
-  size_t n = strlen_P(p); 
+  size_t n = strlen_P(p);
   char * name = (char*) malloc(n+1);
   if (name) {
-    strcpy_P(name, p); 
-    AsyncWebHeader* result = getHeader( String(name)); 
-    free(name); 
-    return result; 
+    strcpy_P(name, p);
+    AsyncWebHeader* result = getHeader( String(name));
+    free(name);
+    return result;
   } else {
-    return nullptr; 
+    return nullptr;
   }
 }
 
-AsyncWebHeader* AsyncWebServerRequest::getHeader(size_t num) const {
-  auto header = _headers.nth(num);
-  return header ? *header : nullptr;
+const AsyncWebHeader* AsyncWebServerRequest::getHeader(const __FlashStringHelper * data) const {
+  PGM_P p = reinterpret_cast<PGM_P>(data);
+  size_t n = strlen_P(p);
+  char * name = (char*) malloc(n+1);
+  if (name) {
+    strcpy_P(name, p);
+    const AsyncWebHeader* result = getHeader( String(name));
+    free(name);
+    return result;
+  } else {
+    return nullptr;
+  }
+}
+
+AsyncWebHeader* AsyncWebServerRequest::getHeader(size_t num) {
+  if (num >= _headers.size())
+      return nullptr;
+  return &(*std::next(std::begin(_headers), num));
+}
+
+const AsyncWebHeader* AsyncWebServerRequest::getHeader(size_t num) const {
+  if (num >= _headers.size())
+      return nullptr;
+  return &(*std::next(std::begin(_headers), num));
 }
 
 size_t AsyncWebServerRequest::params() const {
@@ -704,8 +745,9 @@ AsyncWebParameter* AsyncWebServerRequest::getParam(size_t num) const {
 }
 
 void AsyncWebServerRequest::addInterestingHeader(const String& name){
-  if(!_interestingHeaders.containsIgnoreCase(name))
-    _interestingHeaders.add(name);
+  if(std::none_of(std::begin(_interestingHeaders), std::end(_interestingHeaders),
+                  [&name](const String &str){ return str.equalsIgnoreCase(name); }))
+    _interestingHeaders.push_back(name);
 }
 
 void AsyncWebServerRequest::send(AsyncWebServerResponse *response){
@@ -923,7 +965,7 @@ const String& AsyncWebServerRequest::pathArg(size_t i) const {
 }
 
 const String& AsyncWebServerRequest::header(const char* name) const {
-  AsyncWebHeader* h = getHeader(String(name));
+  const AsyncWebHeader* h = getHeader(String(name));
   return h ? h->value() : SharedEmptyString;
 }
 
@@ -943,12 +985,12 @@ const String& AsyncWebServerRequest::header(const __FlashStringHelper * data) co
 
 
 const String& AsyncWebServerRequest::header(size_t i) const {
-  AsyncWebHeader* h = getHeader(i);
+  const AsyncWebHeader* h = getHeader(i);
   return h ?  h->value() : SharedEmptyString;
 }
 
 const String& AsyncWebServerRequest::headerName(size_t i) const {
-  AsyncWebHeader* h = getHeader(i);
+  const AsyncWebHeader* h = getHeader(i);
   return h ? h->name() : SharedEmptyString;
 }
 
