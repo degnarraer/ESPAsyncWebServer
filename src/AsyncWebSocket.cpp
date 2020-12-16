@@ -863,7 +863,6 @@ AsyncWebSocket::AsyncWebSocket(const String& url)
   ,_clients(LinkedList<AsyncWebSocketClient *>([](AsyncWebSocketClient *c){ delete c; }))
   ,_cNextId(1)
   ,_enabled(true)
-  ,_buffers(LinkedList<AsyncWebSocketMessageBuffer *>([](AsyncWebSocketMessageBuffer *b){ delete b; }))
 {
   _eventHandler = NULL;
 }
@@ -1208,21 +1207,23 @@ void AsyncWebSocket::handleRequest(AsyncWebServerRequest *request){
 
 AsyncWebSocketMessageBuffer * AsyncWebSocket::makeBuffer(size_t size)
 {
-  AsyncWebSocketMessageBuffer * buffer = new AsyncWebSocketMessageBuffer(size); 
-  if (buffer) {
+  AsyncWebSocketMessageBuffer *buffer{};
+  {
     AsyncWebLockGuard l(_lock);
-    _buffers.add(buffer);
+    _buffers.emplace_back(size);
+    buffer = &_buffers.back();
   }
   return buffer; 
 }
 
 AsyncWebSocketMessageBuffer * AsyncWebSocket::makeBuffer(uint8_t * data, size_t size)
 {
-  AsyncWebSocketMessageBuffer * buffer = new AsyncWebSocketMessageBuffer(data, size); 
+  AsyncWebSocketMessageBuffer *buffer{};
   
-  if (buffer) {
+  {
     AsyncWebLockGuard l(_lock);
-    _buffers.add(buffer);
+    _buffers.emplace_back(data, size);
+    buffer = &_buffers.back();
   }
 
   return buffer; 
@@ -1232,10 +1233,11 @@ void AsyncWebSocket::_cleanBuffers()
 {
   AsyncWebLockGuard l(_lock);
 
-  for(AsyncWebSocketMessageBuffer * c: _buffers){
-    if(c && c->canDelete()){
-        _buffers.remove(c);
-    }
+  for (auto iter = std::begin(_buffers); iter != std::end(_buffers);){
+    if(iter->canDelete()){
+        iter = _buffers.erase(iter);
+    } else
+        iter++;
   }
 }
 
