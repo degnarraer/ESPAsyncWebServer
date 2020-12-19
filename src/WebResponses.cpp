@@ -84,7 +84,6 @@ const char* AsyncWebServerResponse::_responseCodeToString(int code) {
 
 AsyncWebServerResponse::AsyncWebServerResponse()
   : _code(0)
-  , _headers(LinkedList<AsyncWebHeader *>([](AsyncWebHeader *h){ delete h; }))
   , _contentType()
   , _contentLength(0)
   , _sendContentLength(true)
@@ -95,14 +94,12 @@ AsyncWebServerResponse::AsyncWebServerResponse()
   , _writtenLength(0)
   , _state(RESPONSE_SETUP)
 {
-  for(auto header: DefaultHeaders::Instance()) {
-    _headers.add(new AsyncWebHeader(header->name(), header->value()));
+  for(const auto &header : DefaultHeaders::Instance()) {
+    _headers.emplace_back(header);
   }
 }
 
-AsyncWebServerResponse::~AsyncWebServerResponse(){
-  _headers.free();
-}
+AsyncWebServerResponse::~AsyncWebServerResponse() = default;
 
 void AsyncWebServerResponse::setCode(int code){
   if(_state == RESPONSE_SETUP)
@@ -120,7 +117,7 @@ void AsyncWebServerResponse::setContentType(const String& type){
 }
 
 void AsyncWebServerResponse::addHeader(const String& name, const String& value){
-  _headers.add(new AsyncWebHeader(name, value));
+  _headers.emplace_back(name, value);
 }
 
 String AsyncWebServerResponse::_assembleHead(uint8_t version){
@@ -145,11 +142,11 @@ String AsyncWebServerResponse::_assembleHead(uint8_t version){
     out.concat(buf);
   }
 
-  for(const auto& header: _headers){
-    snprintf(buf, bufSize, "%s: %s\r\n", header->name().c_str(), header->value().c_str());
+  for(const auto &header: _headers){
+    snprintf(buf, bufSize, "%s: %s\r\n", header.name().c_str(), header.value().c_str());
     out.concat(buf);
   }
-  _headers.free();
+  _headers.clear();
 
   out.concat("\r\n");
   _headLength = out.length();
@@ -666,16 +663,15 @@ size_t AsyncProgmemResponse::_fillBuffer(uint8_t *data, size_t len){
  * Response Stream (You can print/write/printf to it, up to the contentLen bytes)
  * */
 
-AsyncResponseStream::AsyncResponseStream(const String& contentType, size_t bufferSize){
+AsyncResponseStream::AsyncResponseStream(const String& contentType, size_t bufferSize)
+{
   _code = 200;
   _contentLength = 0;
   _contentType = contentType;
-  _content = new cbuf(bufferSize);
+  _content = std::make_unique<cbuf>(bufferSize);
 }
 
-AsyncResponseStream::~AsyncResponseStream(){
-  delete _content;
-}
+AsyncResponseStream::~AsyncResponseStream() = default;
 
 size_t AsyncResponseStream::_fillBuffer(uint8_t *buf, size_t maxLen){
   return _content->read((char*)buf, maxLen);

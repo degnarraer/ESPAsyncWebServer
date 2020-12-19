@@ -184,9 +184,7 @@ void AsyncWebServerRequest::_removeNotInterestingHeaders(){
 
   for(auto iter = std::begin(_headers); iter != std::end(_headers); )
   {
-      Serial.print("printing name: ");
       const auto name = iter->name();
-      Serial.println(name);
 
       if (std::none_of(std::begin(_interestingHeaders), std::end(_interestingHeaders),
                        [&name](const String &str){ return str.equalsIgnoreCase(name); }))
