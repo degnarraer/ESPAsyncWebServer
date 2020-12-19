@@ -34,6 +34,7 @@
 #include "AsyncWebSynchronization.h"
 
 #include <list>
+#include <queue>
 
 #ifdef ESP8266
 #include <Hash.h>
@@ -163,7 +164,7 @@ class AsyncWebSocketClient {
     uint32_t _clientId;
     AwsClientStatus _status;
 
-    LinkedList<AsyncWebSocketControl *> _controlQueue;
+    std::queue<AsyncWebSocketControl> _controlQueue;
     LinkedList<AsyncWebSocketMessage *> _messageQueue;
 
     uint8_t _pstate;
@@ -173,7 +174,7 @@ class AsyncWebSocketClient {
     uint32_t _keepAlivePeriod;
 
     void _queueMessage(AsyncWebSocketMessage *dataMessage);
-    void _queueControl(AsyncWebSocketControl *controlMessage);
+    void _queueControl(uint8_t opcode, uint8_t *data=NULL, size_t len=0, bool mask=false);
     void _runQueue();
 
   public:
@@ -245,11 +246,9 @@ typedef std::function<void(AsyncWebSocket * server, AsyncWebSocketClient * clien
 
 //WebServer Handler implementation that plays the role of a socket server
 class AsyncWebSocket: public AsyncWebHandler {
-  public:
-    typedef std::list<AsyncWebSocketClient> AsyncWebSocketClientLinkedList;
   private:
     String _url;
-    AsyncWebSocketClientLinkedList _clients;
+    std::list<AsyncWebSocketClient> _clients;
     uint32_t _cNextId;
     AwsEventHandler _eventHandler;
     bool _enabled;
@@ -336,7 +335,7 @@ class AsyncWebSocket: public AsyncWebHandler {
     std::list<AsyncWebSocketMessageBuffer> _buffers;
     void _cleanBuffers(); 
 
-    const AsyncWebSocketClientLinkedList &getClients() const;
+    const auto &getClients() const { return _clients; }
 };
 
 //WebServer response to authenticate the socket and detach the tcp client from the web server request
