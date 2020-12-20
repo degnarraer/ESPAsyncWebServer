@@ -5,6 +5,10 @@
 
 #include <ESPAsyncWebServer.h>
 
+namespace {
+constexpr const bool asyncWebLockDebug = false;
+}
+
 #ifdef ESP32
 
 // This is the ESP32 version of the Sync Lock, using the FreeRTOS Semaphore
@@ -34,12 +38,12 @@ public:
         if (_lockedBy != currentTask) {
             while (true)
             {
-                Serial.printf("AsyncWebLock::lock this=0x%llx name=%s locker=%s task=0x%llx %s\r\n", uint64_t(this), lockName, lockerName, uint64_t(currentTask), pcTaskGetTaskName(currentTask));
+                if (asyncWebLockDebug) Serial.printf("AsyncWebLock::lock this=0x%llx name=%s locker=%s task=0x%llx %s\r\n", uint64_t(this), lockName, lockerName, uint64_t(currentTask), pcTaskGetTaskName(currentTask));
 
                 if (xSemaphoreTake(_lock, 200 / portTICK_PERIOD_MS))
                     break;
                 else
-                    Serial.printf("AsyncWebLock::lock FAILED this=0x%llx name=%s locker=%s task=0x%llx %s lastLockedBy=%s\r\n", uint64_t(this), lockName, lockerName, uint64_t(currentTask), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()), _lastLockerName);
+                    Serial.printf("AsyncWebLock::lock FAILED(200ms) this=0x%llx name=%s locker=%s task=0x%llx %s lastLockedBy=%s\r\n", uint64_t(this), lockName, lockerName, uint64_t(currentTask), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()), _lastLockerName);
             }
             _lockedBy = currentTask;
             _lastLockerName = lockerName;
@@ -49,7 +53,7 @@ public:
     }
 
     void unlock(const char *lockerName) const {
-        Serial.printf("AsyncWebLock::unlock this=0x%llx name=%s locker=%s task=0x%llx %s\r\n", uint64_t(this), lockName, lockerName, uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+        if (asyncWebLockDebug) Serial.printf("AsyncWebLock::unlock this=0x%llx name=%s locker=%s task=0x%llx %s\r\n", uint64_t(this), lockName, lockerName, uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
         _lockedBy = NULL;
         _lastLockerName = NULL;
         xSemaphoreGive(_lock);
