@@ -517,6 +517,7 @@ void AsyncWebSocketClient::_onAck(size_t len, uint32_t time)
                 if (_status == WS_DISCONNECTING && head.opcode() == WS_DISCONNECT){
                     _controlQueue.pop();
                     _status = WS_DISCONNECTED;
+                    l.unlock();
                     _client->close(true);
                     return;
                 }
@@ -537,13 +538,15 @@ void AsyncWebSocketClient::_onPoll()
 {
     Serial.printf("AsyncWebSocketClient::_onPoll this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
-    if(_client->canSend() && [this](){ AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_onPoll(1)"); return !_controlQueue.empty() || !_messageQueue.empty(); }())
+    AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_onPoll");
+    if(_client->canSend() && (!_controlQueue.empty() || !_messageQueue.empty()))
     {
+        l.unlock();
         _runQueue();
     }
-    else if(_keepAlivePeriod > 0 && (millis() - _lastMessageTime) >= _keepAlivePeriod &&
-            [this](){ AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_onPoll(1)"); return _controlQueue.empty() && _messageQueue.empty(); }())
+    else if(_keepAlivePeriod > 0 && (millis() - _lastMessageTime) >= _keepAlivePeriod && (_controlQueue.empty() && _messageQueue.empty()))
     {
+        l.unlock();
         ping((uint8_t *)AWSC_PING_PAYLOAD, AWSC_PING_PAYLOAD_LEN);
     }
 }
@@ -552,27 +555,21 @@ void AsyncWebSocketClient::_runQueue()
 {
     Serial.printf("AsyncWebSocketClient::_runQueue this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
+    AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_runQueue()");
+
+    while (!_messageQueue.empty() && _messageQueue.front().get().finished())
+        _messageQueue.pop();
+
+    if (!_controlQueue.empty() && (_messageQueue.empty() || _messageQueue.front().get().betweenFrames()) && webSocketSendFrameWindow(_client) > (size_t)(_controlQueue.front().len() - 1))
     {
-        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_runQueue()");
-
-        while (!_messageQueue.empty() && _messageQueue.front().get().finished())
-        {
-            _messageQueue.pop();
-        }
-
-        if (!_controlQueue.empty() && (_messageQueue.empty() || _messageQueue.front().get().betweenFrames()) && webSocketSendFrameWindow(_client) > (size_t)(_controlQueue.front().len() - 1))
-        {
-            l.unlock();
-            _controlQueue.front().send(_client);
-        }
-        else if (!_messageQueue.empty() && _messageQueue.front().get().betweenFrames() && webSocketSendFrameWindow(_client))
-        {
-            l.unlock();
-            _messageQueue.front().get().send(_client);
-        }
+        //l.unlock();
+        _controlQueue.front().send(_client);
     }
-
-    Serial.printf("AsyncWebSocketClient::_runQueue this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    else if (!_messageQueue.empty() && _messageQueue.front().get().betweenFrames() && webSocketSendFrameWindow(_client))
+    {
+        //l.unlock();
+        _messageQueue.front().get().send(_client);
+    }
 }
 
 bool AsyncWebSocketClient::queueIsFull() const
