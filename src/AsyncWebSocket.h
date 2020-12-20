@@ -88,7 +88,7 @@ class AsyncWebSocketMessageBuffer {
     uint8_t * _data;
     size_t _len;
     bool _lock; 
-    uint32_t _count;  
+    uint32_t _count;
 
   public:
     AsyncWebSocketMessageBuffer();
@@ -97,15 +97,15 @@ class AsyncWebSocketMessageBuffer {
     AsyncWebSocketMessageBuffer(const AsyncWebSocketMessageBuffer &); 
     AsyncWebSocketMessageBuffer(AsyncWebSocketMessageBuffer &&); 
     ~AsyncWebSocketMessageBuffer(); 
-    void operator ++(int i) { (void)i; _count++; }
-    void operator --(int i) { (void)i; if (_count > 0) { _count--; } ;  }
+    void operator ++(int i) { Serial.printf("AsyncWebSocketMessageBuffer::operator++() this=0x%llx\r\n", uint64_t(this)); (void)i; _count++; }
+    void operator --(int i) { Serial.printf("AsyncWebSocketMessageBuffer::operator--() this=0x%llx\r\n", uint64_t(this)); (void)i; if (_count > 0) { _count--; } ;  }
     bool reserve(size_t size);
-    void lock() { _lock = true; }
-    void unlock() { _lock = false; }
-    uint8_t * get() { return _data; }
-    size_t length() { return _len; }
-    uint32_t count() { return _count; }
-    bool canDelete() { return (!_count && !_lock); } 
+    void lock() { Serial.printf("AsyncWebSocketMessageBuffer::lock() this=0x%llx\r\n", uint64_t(this)); _lock = true; }
+    void unlock() { Serial.printf("AsyncWebSocketMessageBuffer::unlock() this=0x%llx\r\n", uint64_t(this)); _lock = false; }
+    uint8_t *get() { Serial.printf("AsyncWebSocketMessageBuffer::get() this=0x%llx\r\n", uint64_t(this)); return _data; }
+    size_t length() { Serial.printf("AsyncWebSocketMessageBuffer::length() this=0x%llx\r\n", uint64_t(this)); return _len; }
+    uint32_t count() { Serial.printf("AsyncWebSocketMessageBuffer::count() this=0x%llx\r\n", uint64_t(this)); return _count; }
+    bool canDelete() { Serial.printf("AsyncWebSocketMessageBuffer::canDelete() this=0x%llx\r\n", uint64_t(this)); return (!_count && !_lock); }
 
     friend AsyncWebSocket; 
 
@@ -148,7 +148,8 @@ class AsyncWebSocketMultiMessage: public AsyncWebSocketMessage {
     size_t _sent;
     size_t _ack;
     size_t _acked;
-    AsyncWebSocketMessageBuffer * _WSbuffer; 
+    AsyncWebSocketMessageBuffer *_WSbuffer;
+
 public:
     AsyncWebSocketMultiMessage(AsyncWebSocketMessageBuffer * buffer, uint8_t opcode=WS_TEXT, bool mask=false); 
     virtual ~AsyncWebSocketMultiMessage() override;
@@ -348,7 +349,7 @@ class AsyncWebSocket: public AsyncWebHandler {
     void textAll(char * message);
     void textAll(const String &message);
     void textAll(const __FlashStringHelper *message); //  need to convert
-    void textAll(AsyncWebSocketMessageBuffer * buffer); 
+    void textAll(AsyncWebSocketMessageBuffer *buffer);
 
     void binary(uint32_t id, const char * message, size_t len);
     void binary(uint32_t id, const char * message);
@@ -363,7 +364,7 @@ class AsyncWebSocket: public AsyncWebHandler {
     void binaryAll(char * message);
     void binaryAll(const String &message);
     void binaryAll(const __FlashStringHelper *message, size_t len);
-    void binaryAll(AsyncWebSocketMessageBuffer * buffer); 
+    void binaryAll(AsyncWebSocketMessageBuffer *buffer);
 
     void message(uint32_t id, const char *data, size_t len, uint8_t opcode=WS_TEXT, bool mask=false);
     void message(uint32_t id, AsyncWebSocketMessageBuffer *buffer, uint8_t opcode=WS_TEXT, bool mask=false);

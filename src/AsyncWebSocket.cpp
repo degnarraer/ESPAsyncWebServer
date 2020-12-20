@@ -225,6 +225,8 @@ AsyncWebSocketMessageBuffer::~AsyncWebSocketMessageBuffer()
 
 bool AsyncWebSocketMessageBuffer::reserve(size_t size) 
 {
+  Serial.printf("AsyncWebSocketMessageBuffer::reserve() this=0x%llx\r\n", uint64_t(this));
+
   _len = size; 
 
   if (_data) {
@@ -482,43 +484,49 @@ AsyncWebSocketMultiMessage::~AsyncWebSocketMultiMessage() {
  const size_t AWSC_PING_PAYLOAD_LEN = 22;
 
 AsyncWebSocketClient::AsyncWebSocketClient(AsyncWebServerRequest *request, AsyncWebSocket *server)
-  : _tempObject(NULL)
+  : _lock{"AsyncWebSocketClient"}
+  , _tempObject(NULL)
 {
-  _client = request->client();
-  _server = server;
-  _clientId = _server->_getNextId();
-  _status = WS_CONNECTED;
-  _pstate = 0;
-  _lastMessageTime = millis();
-  _keepAlivePeriod = 0;
-  _client->setRxTimeout(0);
-  _client->onError([](void *r, AsyncClient* c, int8_t error){ (void)c; ((AsyncWebSocketClient*)(r))->_onError(error); }, this);
-  _client->onAck([](void *r, AsyncClient* c, size_t len, uint32_t time){ (void)c; ((AsyncWebSocketClient*)(r))->_onAck(len, time); }, this);
-  _client->onDisconnect([](void *r, AsyncClient* c){ ((AsyncWebSocketClient*)(r))->_onDisconnect(); delete c; }, this);
-  _client->onTimeout([](void *r, AsyncClient* c, uint32_t time){ (void)c; ((AsyncWebSocketClient*)(r))->_onTimeout(time); }, this);
-  _client->onData([](void *r, AsyncClient* c, void *buf, size_t len){ (void)c; ((AsyncWebSocketClient*)(r))->_onData(buf, len); }, this);
-  _client->onPoll([](void *r, AsyncClient* c){ (void)c; ((AsyncWebSocketClient*)(r))->_onPoll(); }, this);
-  //_server->_addClient(this);
-  _server->_handleEvent(this, WS_EVT_CONNECT, request, NULL, 0);
-  delete request;
+    Serial.printf("AsyncWebSocketClient::AsyncWebSocketClient this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+
+    _client = request->client();
+    _server = server;
+    _clientId = _server->_getNextId();
+    _status = WS_CONNECTED;
+    _pstate = 0;
+    _lastMessageTime = millis();
+    _keepAlivePeriod = 0;
+    _client->setRxTimeout(0);
+    _client->onError([](void *r, AsyncClient* c, int8_t error){ (void)c; ((AsyncWebSocketClient*)(r))->_onError(error); }, this);
+    _client->onAck([](void *r, AsyncClient* c, size_t len, uint32_t time){ (void)c; ((AsyncWebSocketClient*)(r))->_onAck(len, time); }, this);
+    _client->onDisconnect([](void *r, AsyncClient* c){ ((AsyncWebSocketClient*)(r))->_onDisconnect(); delete c; }, this);
+    _client->onTimeout([](void *r, AsyncClient* c, uint32_t time){ (void)c; ((AsyncWebSocketClient*)(r))->_onTimeout(time); }, this);
+    _client->onData([](void *r, AsyncClient* c, void *buf, size_t len){ (void)c; ((AsyncWebSocketClient*)(r))->_onData(buf, len); }, this);
+    _client->onPoll([](void *r, AsyncClient* c){ (void)c; ((AsyncWebSocketClient*)(r))->_onPoll(); }, this);
+    //_server->_addClient(this);
+    _server->_handleEvent(this, WS_EVT_CONNECT, request, NULL, 0);
+    delete request;
 }
 
-AsyncWebSocketClient::~AsyncWebSocketClient(){
-  Serial.printf("AsyncWebSocketClient::~AsyncWebSocketClient task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
-
-  AsyncWebLockGuard l(_lock);
-  _messageQueue = {};
-  _controlQueue = {};
-  _server->_handleEvent(this, WS_EVT_DISCONNECT, NULL, NULL, 0);
+AsyncWebSocketClient::~AsyncWebSocketClient()
+{
+    Serial.printf("AsyncWebSocketClient::~AsyncWebSocketClient this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    {
+        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::~AsyncWebSocketClient()");
+        _messageQueue = {};
+        _controlQueue = {};
+    }
+    _server->_handleEvent(this, WS_EVT_DISCONNECT, NULL, NULL, 0);
 }
 
-void AsyncWebSocketClient::_onAck(size_t len, uint32_t time){
-    Serial.printf("AsyncWebSocketClient::_onAck task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+void AsyncWebSocketClient::_onAck(size_t len, uint32_t time)
+{
+    Serial.printf("AsyncWebSocketClient::_onAck this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
     _lastMessageTime = millis();
 
     {
-        AsyncWebLockGuard l(_lock);
+        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_onAck()");
 
         if (!_controlQueue.empty()) {
             auto &head = _controlQueue.front();
@@ -545,14 +553,14 @@ void AsyncWebSocketClient::_onAck(size_t len, uint32_t time){
 
 void AsyncWebSocketClient::_onPoll()
 {
-    Serial.printf("AsyncWebSocketClient::_onPoll task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    Serial.printf("AsyncWebSocketClient::_onPoll this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
-    AsyncWebLockGuard l(_lock);
-    if(_client->canSend() && (!_controlQueue.empty() || !_messageQueue.empty()))
+    if(_client->canSend() && [this](){ AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_onPoll(1)"); return !_controlQueue.empty() || !_messageQueue.empty(); }())
     {
         _runQueue();
     }
-    else if(_keepAlivePeriod > 0 && _controlQueue.empty() && _messageQueue.empty() && (millis() - _lastMessageTime) >= _keepAlivePeriod)
+    else if(_keepAlivePeriod > 0 && (millis() - _lastMessageTime) >= _keepAlivePeriod &&
+            [this](){ AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_onPoll(1)"); return _controlQueue.empty() && _messageQueue.empty(); }())
     {
         ping((uint8_t *)AWSC_PING_PAYLOAD, AWSC_PING_PAYLOAD_LEN);
     }
@@ -560,32 +568,38 @@ void AsyncWebSocketClient::_onPoll()
 
 void AsyncWebSocketClient::_runQueue()
 {
-    Serial.printf("AsyncWebSocketClient::_runQueue task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    Serial.printf("AsyncWebSocketClient::_runQueue this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
-    AsyncWebLockGuard l(_lock);
-
-    while (!_messageQueue.empty() && _messageQueue.front().get().finished())
     {
-        _messageQueue.pop();
+        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_runQueue()");
+
+        while (!_messageQueue.empty() && _messageQueue.front().get().finished())
+        {
+            _messageQueue.pop();
+        }
+
+        if (!_controlQueue.empty() && (_messageQueue.empty() || _messageQueue.front().get().betweenFrames()) && webSocketSendFrameWindow(_client) > (size_t)(_controlQueue.front().len() - 1))
+        {
+            l.unlock();
+            _controlQueue.front().send(_client);
+        }
+        else if (!_messageQueue.empty() && _messageQueue.front().get().betweenFrames() && webSocketSendFrameWindow(_client))
+        {
+            l.unlock();
+            _messageQueue.front().get().send(_client);
+        }
     }
 
-    if (!_controlQueue.empty() && (_messageQueue.empty() || _messageQueue.front().get().betweenFrames()) && webSocketSendFrameWindow(_client) > (size_t)(_controlQueue.front().len() - 1))
-    {
-        _controlQueue.front().send(_client);
-    }
-    else if (!_messageQueue.empty() && _messageQueue.front().get().betweenFrames() && webSocketSendFrameWindow(_client))
-    {
-        _messageQueue.front().get().send(_client);
-    }
+    Serial.printf("AsyncWebSocketClient::_runQueue this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 }
 
 bool AsyncWebSocketClient::queueIsFull() const
 {
-    Serial.printf("AsyncWebSocketClient::queueIsFull task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    Serial.printf("AsyncWebSocketClient::queueIsFull this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
     size_t size;
     {
-        AsyncWebLockGuard l(_lock);
+        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::queueIsFull()");
         size = _messageQueue.size();
     }
     return (size >= WS_MAX_QUEUED_MESSAGES) || (_status != WS_CONNECTED);
@@ -593,11 +607,11 @@ bool AsyncWebSocketClient::queueIsFull() const
 
 bool AsyncWebSocketClient::canSend() const
 {
-    Serial.printf("AsyncWebSocketClient::canSend task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    Serial.printf("AsyncWebSocketClient::canSend this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
     size_t size;
     {
-        AsyncWebLockGuard l(_lock);
+        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::canSend()");
         size = _messageQueue.size();
     }
     return size < WS_MAX_QUEUED_MESSAGES;
@@ -605,10 +619,10 @@ bool AsyncWebSocketClient::canSend() const
 
 void AsyncWebSocketClient::_queueControl(uint8_t opcode, uint8_t *data, size_t len, bool mask)
 {
-    Serial.printf("AsyncWebSocketClient::_queueControl task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    Serial.printf("AsyncWebSocketClient::_queueControl this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
     {
-        AsyncWebLockGuard l(_lock);
+        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_queueControl");
         _controlQueue.emplace(opcode, data, len, mask);
     }
 
@@ -618,20 +632,17 @@ void AsyncWebSocketClient::_queueControl(uint8_t opcode, uint8_t *data, size_t l
 
 void AsyncWebSocketClient::_queueMessage(const char *data, size_t len, uint8_t opcode, bool mask)
 {
-    Serial.printf("AsyncWebSocketClient::_queueMessage task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    Serial.printf("AsyncWebSocketClient::_queueMessage this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
     if(_status != WS_CONNECTED)
-    {
-        PolymorphMessageContainer{data, len, opcode, mask};
         return;
-    }
 
     {
-        AsyncWebLockGuard l(_lock);
+        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_queueMessage");
         if (_messageQueue.size() >= WS_MAX_QUEUED_MESSAGES)
         {
+            l.unlock();
             ets_printf("ERROR: Too many messages queued\n");
-            PolymorphMessageContainer{data, len, opcode, mask};
         }
         else
         {
@@ -645,20 +656,17 @@ void AsyncWebSocketClient::_queueMessage(const char *data, size_t len, uint8_t o
 
 void AsyncWebSocketClient::_queueMessage(AsyncWebSocketMessageBuffer *buffer, uint8_t opcode, bool mask)
 {
-    Serial.printf("AsyncWebSocketClient::_queueMessage task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
+    Serial.printf("AsyncWebSocketClient::_queueMessage this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
     if(_status != WS_CONNECTED)
-    {
-        PolymorphMessageContainer{buffer, opcode, mask};
         return;
-    }
 
     {
-        AsyncWebLockGuard l(_lock);
+        AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::_queueMessage");
         if (_messageQueue.size() >= WS_MAX_QUEUED_MESSAGES)
         {
+            l.unlock();
             ets_printf("ERROR: Too many messages queued\n");
-            PolymorphMessageContainer{buffer, opcode, mask};
         }
         else
         {
@@ -956,6 +964,7 @@ AsyncWebSocket::AsyncWebSocket(const String& url)
   :_url(url)
   ,_cNextId(1)
   ,_enabled(true)
+  ,_lock{"AsyncWebSocket"}
 {
   _eventHandler = NULL;
 }
@@ -1052,16 +1061,20 @@ void AsyncWebSocket::text(uint32_t id, const char * message, size_t len){
     c->text(message, len);
 }
 
-void AsyncWebSocket::textAll(AsyncWebSocketMessageBuffer * buffer){
-  if (!buffer) return;
-  buffer->lock(); 
-  for(auto &c : _clients){
-    if (c.status() == WS_CONNECTED){
-        c.text(buffer);
-    }
-  }
-  buffer->unlock();
-  _cleanBuffers(); 
+void AsyncWebSocket::textAll(AsyncWebSocketMessageBuffer *buffer)
+{
+    if (!buffer)
+        return;
+
+    buffer->lock();
+
+    for(auto &c : _clients)
+        if (c.status() == WS_CONNECTED)
+            c.text(buffer);
+
+    buffer->unlock();
+
+    _cleanBuffers();
 }
 
 
@@ -1088,10 +1101,9 @@ void AsyncWebSocket::binaryAll(AsyncWebSocketMessageBuffer *buffer)
 
     buffer->lock();
 
-    for (auto &c : _clients) {
+    for (auto &c : _clients)
         if (c.status() == WS_CONNECTED)
             c.binary(buffer);
-    }
 
     buffer->unlock();
 
@@ -1315,14 +1327,14 @@ void AsyncWebSocket::handleRequest(AsyncWebServerRequest *request){
   request->send(response);
 }
 
-AsyncWebSocketMessageBuffer * AsyncWebSocket::makeBuffer(size_t size)
+AsyncWebSocketMessageBuffer *AsyncWebSocket::makeBuffer(size_t size)
 {
     Serial.printf("AsyncWebSocket::makeBuffer task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
     AsyncWebSocketMessageBuffer *buffer{};
 
     {
-        AsyncWebLockGuard l(_lock);
+        AsyncWebLockGuard l(_lock, "AsyncWebSocket::makeBuffer");
         _buffers.emplace_back(size);
         buffer = &_buffers.back();
     }
@@ -1330,14 +1342,14 @@ AsyncWebSocketMessageBuffer * AsyncWebSocket::makeBuffer(size_t size)
     return buffer;
 }
 
-AsyncWebSocketMessageBuffer * AsyncWebSocket::makeBuffer(uint8_t * data, size_t size)
+AsyncWebSocketMessageBuffer *AsyncWebSocket::makeBuffer(uint8_t * data, size_t size)
 {
     Serial.printf("AsyncWebSocket::makeBuffer task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
     AsyncWebSocketMessageBuffer *buffer{};
 
     {
-        AsyncWebLockGuard l(_lock);
+        AsyncWebLockGuard l(_lock, "AsyncWebSocket::makeBuffer");
         _buffers.emplace_back(data, size);
         buffer = &_buffers.back();
     }
@@ -1349,7 +1361,7 @@ void AsyncWebSocket::_cleanBuffers()
 {
     Serial.printf("AsyncWebSocket::_cleanBuffers task=0x%llx %s\r\n", uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
 
-    AsyncWebLockGuard l(_lock);
+    AsyncWebLockGuard l(_lock, "AsyncWebSocket::_cleanBuffers()");
 
     for (auto iter = std::begin(_buffers); iter != std::end(_buffers);)
     {

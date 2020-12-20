@@ -12,10 +12,14 @@ class AsyncWebLock
 {
 private:
   SemaphoreHandle_t _lock;
-  mutable void *_lockedBy;
+  mutable TaskHandle_t _lockedBy{};
+  mutable const char *_lastLockerName;
 
 public:
-  AsyncWebLock() {
+  const char * const lockName;
+  AsyncWebLock(const char *_lockName) :
+    lockName{_lockName}
+  {
     _lock = xSemaphoreCreateBinary();
     _lockedBy = NULL;
     xSemaphoreGive(_lock);
@@ -25,18 +29,29 @@ public:
     vSemaphoreDelete(_lock);
   }
 
-  bool lock() const {
-    extern void *pxCurrentTCB;
-    if (_lockedBy != pxCurrentTCB) {
-      xSemaphoreTake(_lock, portMAX_DELAY);
-      _lockedBy = pxCurrentTCB;
+  bool lock(const char *lockerName) const {
+    const auto currentTask = xTaskGetCurrentTaskHandle();
+    if (_lockedBy != currentTask) {
+      while (true)
+      {
+        Serial.printf("AsyncWebLock::lock this=0x%llx name=%s locker=%s task=0x%llx %s\r\n", uint64_t(this), lockName, lockerName, uint64_t(currentTask), pcTaskGetTaskName(currentTask));
+
+        if (xSemaphoreTake(_lock, 200 / portTICK_PERIOD_MS))
+          break;
+        else
+          Serial.printf("AsyncWebLock::lock FAILED this=0x%llx name=%s locker=%s task=0x%llx %s lastLockedBy=%s\r\n", uint64_t(this), lockName, lockerName, uint64_t(currentTask), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()), _lastLockerName);
+      }
+      _lockedBy = currentTask;
+      _lastLockerName = lockerName;
       return true;
     }
     return false;
   }
 
-  void unlock() const {
+  void unlock(const char *lockerName) const {
+    Serial.printf("AsyncWebLock::unlock this=0x%llx name=%s locker=%s task=0x%llx %s\r\n", uint64_t(this), lockName, lockerName, uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
     _lockedBy = NULL;
+    _lastLockerName = NULL;
     xSemaphoreGive(_lock);
   }
 };
@@ -69,8 +84,12 @@ private:
   const AsyncWebLock *_lock;
 
 public:
-  AsyncWebLockGuard(const AsyncWebLock &l) {
-    if (l.lock()) {
+  const char * const lockerName;
+
+  AsyncWebLockGuard(const AsyncWebLock &l, const char *_lockerName) :
+    lockerName{_lockerName}
+  {
+    if (l.lock(lockerName)) {
       _lock = &l;
     } else {
       _lock = NULL;
@@ -79,7 +98,14 @@ public:
 
   ~AsyncWebLockGuard() {
     if (_lock) {
-      _lock->unlock();
+      _lock->unlock(lockerName);
+    }
+  }
+
+  void unlock() {
+    if (_lock) {
+      _lock->unlock(lockerName);
+      _lock = NULL;
     }
   }
 };
