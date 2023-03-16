@@ -63,7 +63,7 @@ size_t webSocketSendFrame(AsyncClient *client, bool final, uint8_t opcode, bool 
 
   if(len > space) len = space;
 
-  uint8_t *buf = (uint8_t*)malloc(headLen);
+  uint8_t *buf = (uint8_t*)heap_caps_malloc(headLen, MALLOC_CAP_SPIRAM);
   if(buf == NULL){
     //os_printf("could not malloc %u bytes for frame header\n", headLen);
     return 0;
@@ -85,10 +85,10 @@ size_t webSocketSendFrame(AsyncClient *client, bool final, uint8_t opcode, bool 
   }
   if(client->add((const char *)buf, headLen) != headLen){
     //os_printf("error adding %lu header bytes\n", headLen);
-    free(buf);
+    heap_caps_free(buf);
     return 0;
   }
-  free(buf);
+  heap_caps_free(buf);
 
   if(len){
     if(len && mask){
@@ -249,7 +249,7 @@ class AsyncWebSocketControl {
       if(_len){
         if(_len > 125)
           _len = 125;
-        _data = (uint8_t*)malloc(_len);
+        _data = (uint8_t*)heap_caps_malloc(_len, MALLOC_CAP_SPIRAM);
         if(_data == NULL)
           _len = 0;
         else memcpy(_data, data, len);
@@ -257,7 +257,7 @@ class AsyncWebSocketControl {
     }
     virtual ~AsyncWebSocketControl(){
       if(_data != NULL)
-        free(_data);
+        heap_caps_free(_data);
     }
     virtual bool finished() const { return _finished; }
     uint8_t opcode(){ return _opcode; }
@@ -281,7 +281,7 @@ AsyncWebSocketBasicMessage::AsyncWebSocketBasicMessage(const char * data, size_t
 {
   _opcode = opcode & 0x07;
   _mask = mask;
-  _data = (uint8_t*)malloc(_len+1);
+  _data = (uint8_t*)heap_caps_malloc(_len+1, MALLOC_CAP_SPIRAM);
   if(_data == NULL){
     _len = 0;
     _status = WS_MSG_ERROR;
@@ -306,7 +306,7 @@ AsyncWebSocketBasicMessage::AsyncWebSocketBasicMessage(uint8_t opcode, bool mask
 
 AsyncWebSocketBasicMessage::~AsyncWebSocketBasicMessage() {
   if(_data != NULL)
-    free(_data);
+    heap_caps_free(_data);
 }
 
  void AsyncWebSocketBasicMessage::ack(size_t len, uint32_t time)  {
@@ -575,7 +575,7 @@ void AsyncWebSocketClient::close(uint16_t code, const char * message){
       if(mlen > 123) mlen = 123;
       packetLen += mlen;
     }
-    char * buf = (char*)malloc(packetLen);
+    char * buf = (char*)heap_caps_malloc(packetLen, MALLOC_CAP_SPIRAM);
     if(buf != NULL){
       buf[0] = (uint8_t)(code >> 8);
       buf[1] = (uint8_t)(code & 0xFF);
@@ -583,7 +583,7 @@ void AsyncWebSocketClient::close(uint16_t code, const char * message){
         memcpy(buf+2, message, packetLen -2);
       }
       _queueControl(new AsyncWebSocketControl(WS_DISCONNECT,(uint8_t*)buf,packetLen));
-      free(buf);
+      heap_caps_free(buf);
       return;
     }
   }
@@ -782,13 +782,13 @@ void AsyncWebSocketClient::text(const __FlashStringHelper *data){
     if (pgm_read_byte(p+n) == 0) break;
       n += 1;
   }
-  char * message = (char*) malloc(n+1);
+  char * message = (char*) heap_caps_malloc(n+1, MALLOC_CAP_SPIRAM);
   if(message){
     for(size_t b=0; b<n; b++)
       message[b] = pgm_read_byte(p++);
     message[n] = 0;
     text(message, n);
-    free(message);
+    heap_caps_free(message);
   }
 }
 void AsyncWebSocketClient::text(AsyncWebSocketMessageBuffer * buffer)
@@ -813,12 +813,12 @@ void AsyncWebSocketClient::binary(const String &message){
 }
 void AsyncWebSocketClient::binary(const __FlashStringHelper *data, size_t len){
   PGM_P p = reinterpret_cast<PGM_P>(data);
-  char * message = (char*) malloc(len);
+  char * message = (char*) heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
   if(message){
     for(size_t b=0; b<len; b++)
       message[b] = pgm_read_byte(p++);
     binary(message, len);
-    free(message); 
+    heap_caps_free(message); 
   }
   
 }
@@ -1242,14 +1242,14 @@ AsyncWebSocketResponse::AsyncWebSocketResponse(const String& key, AsyncWebSocket
   _code = 101;
   _sendContentLength = false;
 
-  uint8_t * hash = (uint8_t*)malloc(20);
+  uint8_t * hash = (uint8_t*)heap_caps_malloc(20, MALLOC_CAP_SPIRAM);
   if(hash == NULL){
     _state = RESPONSE_FAILED;
     return;
   }
-  char * buffer = (char *) malloc(33);
+  char * buffer = (char *) heap_caps_malloc(33, MALLOC_CAP_SPIRAM);
   if(buffer == NULL){
-    free(hash);
+    heap_caps_free(hash);
     _state = RESPONSE_FAILED;
     return;
   }
@@ -1271,8 +1271,8 @@ AsyncWebSocketResponse::AsyncWebSocketResponse(const String& key, AsyncWebSocket
   addHeader(WS_STR_CONNECTION, WS_STR_UPGRADE);
   addHeader(WS_STR_UPGRADE, "websocket");
   addHeader(WS_STR_ACCEPT,buffer);
-  free(buffer);
-  free(hash);
+  heap_caps_free(buffer);
+  heap_caps_free(hash);
 }
 
 void AsyncWebSocketResponse::_respond(AsyncWebServerRequest *request){
