@@ -90,7 +90,7 @@ AsyncWebServerRequest::~AsyncWebServerRequest(){
   }
 
   if(_tempObject != NULL){
-    free(_tempObject);
+    heap_caps_free(_tempObject);
   }
 
   if(_tempFile){
@@ -465,8 +465,8 @@ void AsyncWebServerRequest::_parseMultipartPostByte(uint8_t data, bool last){
         _itemValue = String();
         if(_itemIsFile){
           if(_itemBuffer)
-            free(_itemBuffer);
-          _itemBuffer = (uint8_t*)malloc(1460);
+            heap_caps_free(_itemBuffer);
+          _itemBuffer = (uint8_t*)heap_caps_malloc(1460, MALLOC_CAP_SPIRAM);
           if(_itemBuffer == NULL){
             _multiParseState = PARSE_ERROR;
             return;
@@ -516,7 +516,7 @@ void AsyncWebServerRequest::_parseMultipartPostByte(uint8_t data, bool last){
           _itemBufferIndex = 0;
           _addParam(new AsyncWebParameter(_itemName, _itemFilename, true, true, _itemSize));
         }
-        free(_itemBuffer);
+        heap_caps_free(_itemBuffer);
         _itemBuffer = NULL;
       }
 
@@ -605,13 +605,13 @@ bool AsyncWebServerRequest::hasHeader(const __FlashStringHelper * data) const {
     if (pgm_read_byte(p+n) == 0) break;
       n += 1;
   }
-  char * name = (char*) malloc(n+1);
+  char * name = (char*) heap_caps_malloc(n+1, MALLOC_CAP_SPIRAM);
   name[n] = 0; 
   if (name) {
     for(size_t b=0; b<n; b++)
       name[b] = pgm_read_byte(p++);    
     bool result = hasHeader( String(name) ); 
-    free(name); 
+    heap_caps_free(name); 
     return result; 
   } else {
     return false; 
@@ -630,11 +630,11 @@ AsyncWebHeader* AsyncWebServerRequest::getHeader(const String& name) const {
 AsyncWebHeader* AsyncWebServerRequest::getHeader(const __FlashStringHelper * data) const {
   PGM_P p = reinterpret_cast<PGM_P>(data);
   size_t n = strlen_P(p); 
-  char * name = (char*) malloc(n+1);
+  char * name = (char*) heap_caps_malloc(n+1, MALLOC_CAP_SPIRAM);
   if (name) {
     strcpy_P(name, p); 
     AsyncWebHeader* result = getHeader( String(name)); 
-    free(name); 
+    heap_caps_free(name); 
     return result; 
   } else {
     return nullptr; 
@@ -663,12 +663,12 @@ bool AsyncWebServerRequest::hasParam(const __FlashStringHelper * data, bool post
   PGM_P p = reinterpret_cast<PGM_P>(data);
   size_t n = strlen_P(p);
 
-  char * name = (char*) malloc(n+1);
+  char * name = (char*) heap_caps_malloc(n+1, MALLOC_CAP_SPIRAM);
   name[n] = 0; 
   if (name) {
     strcpy_P(name,p);    
     bool result = hasParam( name, post, file); 
-    free(name); 
+    heap_caps_free(name); 
     return result; 
   } else {
     return false; 
@@ -687,11 +687,11 @@ AsyncWebParameter* AsyncWebServerRequest::getParam(const String& name, bool post
 AsyncWebParameter* AsyncWebServerRequest::getParam(const __FlashStringHelper * data, bool post, bool file) const {
   PGM_P p = reinterpret_cast<PGM_P>(data);
   size_t n = strlen_P(p);
-  char * name = (char*) malloc(n+1);
+  char * name = (char*) heap_caps_malloc(n+1, MALLOC_CAP_SPIRAM);
   if (name) {
     strcpy_P(name, p);   
     AsyncWebParameter* result = getParam(name, post, file); 
-    free(name); 
+    heap_caps_free(name); 
     return result; 
   } else {
     return nullptr; 
@@ -873,11 +873,11 @@ bool AsyncWebServerRequest::hasArg(const char* name) const {
 bool AsyncWebServerRequest::hasArg(const __FlashStringHelper * data) const {
   PGM_P p = reinterpret_cast<PGM_P>(data);
   size_t n = strlen_P(p); 
-  char * name = (char*) malloc(n+1);
+  char * name = (char*) heap_caps_malloc(n+1, MALLOC_CAP_SPIRAM);
   if (name) {
     strcpy_P(name, p);    
     bool result = hasArg( name ); 
-    free(name); 
+    heap_caps_free(name); 
     return result; 
   } else {
     return false; 
@@ -897,11 +897,11 @@ const String& AsyncWebServerRequest::arg(const String& name) const {
 const String& AsyncWebServerRequest::arg(const __FlashStringHelper * data) const {
   PGM_P p = reinterpret_cast<PGM_P>(data);
   size_t n = strlen_P(p);
-  char * name = (char*) malloc(n+1);
+  char * name = (char*) heap_caps_malloc(n+1, MALLOC_CAP_SPIRAM);
   if (name) {
     strcpy_P(name, p);
     const String & result = arg( String(name) ); 
-    free(name); 
+    heap_caps_free(name); 
     return result; 
   } else {
     return SharedEmptyString;
@@ -930,11 +930,11 @@ const String& AsyncWebServerRequest::header(const char* name) const {
 const String& AsyncWebServerRequest::header(const __FlashStringHelper * data) const {
   PGM_P p = reinterpret_cast<PGM_P>(data);
   size_t n = strlen_P(p); 
-  char * name = (char*) malloc(n+1);
+  char * name = (char*) heap_caps_malloc(n+1, MALLOC_CAP_SPIRAM);
   if (name) {
     strcpy_P(name, p);  
     const String & result = header( (const char *)name ); 
-    free(name); 
+    heap_caps_free(name); 
     return result; 
   } else {
     return SharedEmptyString; 

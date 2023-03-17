@@ -303,13 +303,13 @@ static bool addExclude(const char *item){
     if(!len){
         return false;
     }
-    ExcludeList *e = (ExcludeList *)malloc(sizeof(ExcludeList));
+    ExcludeList *e = (ExcludeList *)heap_caps_malloc(sizeof(ExcludeList), MALLOC_CAP_SPIRAM);
     if(!e){
         return false;
     }
-    e->item = (char *)malloc(len+1);
+    e->item = (char *)heap_caps_malloc(len+1, MALLOC_CAP_SPIRAM);
     if(!e->item){
-        free(e);
+        heap_caps_free(e);
         return false;
     }
     memcpy(e->item, item, len+1);

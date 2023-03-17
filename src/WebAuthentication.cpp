@@ -65,7 +65,7 @@ static bool getMD5(uint8_t * data, uint16_t len, char * output){//33 bytes or mo
     md5_context_t _ctx;
 #endif
   uint8_t i;
-  uint8_t * _buf = (uint8_t*)malloc(16);
+  uint8_t * _buf = (uint8_t*)heap_caps_malloc(16, MALLOC_CAP_SPIRAM);
   if(_buf == NULL)
     return false;
   memset(_buf, 0x00, 16);
@@ -82,7 +82,7 @@ static bool getMD5(uint8_t * data, uint16_t len, char * output){//33 bytes or mo
   for(i = 0; i < 16; i++) {
     sprintf(output + (i * 2), "%02x", _buf[i]);
   }
-  free(_buf);
+  heap_caps_free(_buf);
   return true;
 }
 
@@ -92,20 +92,20 @@ static String genRandomMD5(){
 #else
   uint32_t r = rand();
 #endif
-  char * out = (char*)malloc(33);
+  char * out = (char*)heap_caps_malloc(33, MALLOC_CAP_SPIRAM);
   if(out == NULL || !getMD5((uint8_t*)(&r), 4, out))
     return "";
   String res = String(out);
-  free(out);
+  heap_caps_free(out);
   return res;
 }
 
 static String stringMD5(const String& in){
-  char * out = (char*)malloc(33);
+  char * out = (char*)heap_caps_malloc(33, MALLOC_CAP_SPIRAM);
   if(out == NULL || !getMD5((uint8_t*)(in.c_str()), in.length(), out))
     return "";
   String res = String(out);
-  free(out);
+  heap_caps_free(out);
   return res;
 }
 
@@ -113,7 +113,7 @@ String generateDigestHash(const char * username, const char * password, const ch
   if(username == NULL || password == NULL || realm == NULL){
     return "";
   }
-  char * out = (char*)malloc(33);
+  char * out = (char*)heap_caps_malloc(33, MALLOC_CAP_SPIRAM);
   String res = String(username);
   res.concat(":");
   res.concat(realm);
@@ -123,7 +123,7 @@ String generateDigestHash(const char * username, const char * password, const ch
   if(out == NULL || !getMD5((uint8_t*)(in.c_str()), in.length(), out))
     return "";
   res.concat(out);
-  free(out);
+  heap_caps_free(out);
   return res;
 }
 

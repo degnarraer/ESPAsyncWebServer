@@ -162,7 +162,7 @@ bool AsyncStaticWebHandler::_fileExists(AsyncWebServerRequest *request, const St
   if (found) {
     // Extract the file name from the path and keep it in _tempObject
     size_t pathLen = path.length();
-    char * _tempPath = (char*)malloc(pathLen+1);
+    char * _tempPath = (char*)heap_caps_malloc(pathLen+1, MALLOC_CAP_SPIRAM);
     snprintf(_tempPath, pathLen+1, "%s", path.c_str());
     request->_tempObject = (void*)_tempPath;
 

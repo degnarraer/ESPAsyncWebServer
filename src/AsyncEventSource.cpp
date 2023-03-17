@@ -50,14 +50,14 @@ static String generateEventMessage(const char *message, const char *event, uint3
       char * nextR = strchr(lineStart, '\r');
       if(nextN == NULL && nextR == NULL){
         size_t llen = ((char *)message + messageLen) - lineStart;
-        char * ldata = (char *)malloc(llen+1);
+        char * ldata = (char *)heap_caps_malloc(llen+1, MALLOC_CAP_SPIRAM);
         if(ldata != NULL){
           memcpy(ldata, lineStart, llen);
           ldata[llen] = 0;
           ev += "data: ";
           ev += ldata;
           ev += "\r\n\r\n";
-          free(ldata);
+          heap_caps_free(ldata);
         }
         lineStart = (char *)message + messageLen;
       } else {
@@ -85,14 +85,14 @@ static String generateEventMessage(const char *message, const char *event, uint3
         }
 
         size_t llen = lineEnd - lineStart;
-        char * ldata = (char *)malloc(llen+1);
+        char * ldata = (char *)heap_caps_malloc(llen+1, MALLOC_CAP_SPIRAM);
         if(ldata != NULL){
           memcpy(ldata, lineStart, llen);
           ldata[llen] = 0;
           ev += "data: ";
           ev += ldata;
           ev += "\r\n";
-          free(ldata);
+          heap_caps_free(ldata);
         }
         lineStart = nextLine;
         if(lineStart == ((char *)message + messageLen))
@@ -109,7 +109,7 @@ static String generateEventMessage(const char *message, const char *event, uint3
 AsyncEventSourceMessage::AsyncEventSourceMessage(const char * data, size_t len)
 : _data(nullptr), _len(len), _sent(0), _acked(0)
 {
-  _data = (uint8_t*)malloc(_len+1);
+  _data = (uint8_t*)heap_caps_malloc(_len+1, MALLOC_CAP_SPIRAM);
   if(_data == nullptr){
     _len = 0;
   } else {
@@ -120,7 +120,7 @@ AsyncEventSourceMessage::AsyncEventSourceMessage(const char * data, size_t len)
 
 AsyncEventSourceMessage::~AsyncEventSourceMessage() {
      if(_data != NULL)
-        free(_data);
+        heap_caps_free(_data);
 }
 
 size_t AsyncEventSourceMessage::ack(size_t len, uint32_t time) {
@@ -264,7 +264,7 @@ void AsyncEventSource::onConnect(ArEventHandlerFunction cb){
 }
 
 void AsyncEventSource::_addClient(AsyncEventSourceClient * client){
-  /*char * temp = (char *)malloc(2054);
+  /*char * temp = (char *)heap_caps_malloc(2054, MALLOC_CAP_SPIRAM);
   if(temp != NULL){
     memset(temp+1,' ',2048);
     temp[0] = ':';
@@ -274,7 +274,7 @@ void AsyncEventSource::_addClient(AsyncEventSourceClient * client){
     temp[2052] = '\n';
     temp[2053] = 0;
     client->write((const char *)temp, 2053);
-    free(temp);
+    heap_caps_free(temp);
   }*/
   
   _clients.add(client);

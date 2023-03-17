@@ -23,7 +23,7 @@
 #include <Arduino.h>
 #ifdef ESP32
 #include <AsyncTCP.h>
-#define SSE_MAX_QUEUED_MESSAGES 1024
+#define SSE_MAX_QUEUED_MESSAGES 2048
 #else
 #include <ESPAsyncTCP.h>
 #define SSE_MAX_QUEUED_MESSAGES 8

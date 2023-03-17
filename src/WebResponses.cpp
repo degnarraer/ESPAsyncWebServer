@@ -297,7 +297,7 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
       outLen = ((_contentLength - _sentLength) > space)?space:(_contentLength - _sentLength);
     }
 
-    uint8_t *buf = (uint8_t *)malloc(outLen+headLen);
+    uint8_t *buf = (uint8_t *)heap_caps_malloc(outLen+headLen, MALLOC_CAP_SPIRAM);
     if (!buf) {
       // os_printf("_ack malloc %d failed\n", outLen+headLen);
       return 0;
@@ -347,7 +347,7 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
         _sentLength += outLen - headLen;
     }
 
-    free(buf);
+    heap_caps_free(buf);
 
     if((_chunked && readLen == 0) || (!_sendContentLength && outLen == 0) || (!_chunked && _sentLength == _contentLength)){
       _state = RESPONSE_WAIT_ACK;

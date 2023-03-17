@@ -242,7 +242,7 @@ public:
     if (_onRequest) {
       _contentLength = total;
       if (total > 0 && request->_tempObject == NULL && total < _maxContentLength) {
-        request->_tempObject = malloc(total);
+        request->_tempObject = heap_caps_malloc(total, MALLOC_CAP_SPIRAM);
       }
       if (request->_tempObject != NULL) {
         memcpy((uint8_t*)(request->_tempObject) + index, data, len);
