@@ -24,6 +24,7 @@
 #include "Arduino.h"
 
 #include <functional>
+#include <list>
 #include "FS.h"
 
 #include "StringArray.h"
@@ -108,6 +109,9 @@ class AsyncWebHeader {
     String _value;
 
   public:
+    AsyncWebHeader() = default;
+    AsyncWebHeader(const AsyncWebHeader &) = default;
+
     AsyncWebHeader(const String& name, const String& value): _name(name), _value(value){}
     AsyncWebHeader(const String& data): _name(), _value(){
       if(!data) return;
@@ -116,10 +120,12 @@ class AsyncWebHeader {
       _name = data.substring(0, index);
       _value = data.substring(index + 2);
     }
-    ~AsyncWebHeader(){}
+
+    AsyncWebHeader &operator=(const AsyncWebHeader &) = default;
+
     const String& name() const { return _name; }
     const String& value() const { return _value; }
-    String toString() const { return String(_name+": "+_value+"\r\n"); }
+    String toString() const { return _name+": "+_value+"\r\n"; }
 };
 
 /*
@@ -141,7 +147,7 @@ class AsyncWebServerRequest {
     AsyncWebServer* _server;
     AsyncWebHandler* _handler;
     AsyncWebServerResponse* _response;
-    StringArray _interestingHeaders;
+    std::vector<String> _interestingHeaders;
     ArDisconnectHandler _onDisconnectfn;
 
     String _temp;
@@ -163,9 +169,9 @@ class AsyncWebServerRequest {
     size_t _contentLength;
     size_t _parsedLength;
 
-    LinkedList<AsyncWebHeader *> _headers;
+    std::list<AsyncWebHeader> _headers;
     LinkedList<AsyncWebParameter *> _params;
-    LinkedList<String *> _pathParams;
+    std::vector<String> _pathParams;
 
     uint8_t _multiParseState;
     uint8_t _boundaryPosition;
@@ -257,9 +263,12 @@ class AsyncWebServerRequest {
     bool hasHeader(const String& name) const;   // check if header exists
     bool hasHeader(const __FlashStringHelper * data) const;   // check if header exists
 
-    AsyncWebHeader* getHeader(const String& name) const;
-    AsyncWebHeader* getHeader(const __FlashStringHelper * data) const;
-    AsyncWebHeader* getHeader(size_t num) const;
+    AsyncWebHeader* getHeader(const String& name);
+    const AsyncWebHeader* getHeader(const String& name) const;
+    AsyncWebHeader* getHeader(const __FlashStringHelper * data);
+    const AsyncWebHeader* getHeader(const __FlashStringHelper * data) const;
+    AsyncWebHeader* getHeader(size_t num);
+    const AsyncWebHeader* getHeader(size_t num) const;
 
     size_t params() const;                      // get arguments count
     bool hasParam(const String& name, bool post=false, bool file=false) const;
@@ -358,7 +367,7 @@ typedef enum {
 class AsyncWebServerResponse {
   protected:
     int _code;
-    LinkedList<AsyncWebHeader *> _headers;
+    std::list<AsyncWebHeader> _headers;
     String _contentType;
     size_t _contentLength;
     bool _sendContentLength;
@@ -403,6 +412,7 @@ class AsyncWebServer {
 
   public:
     AsyncWebServer(uint16_t port);
+    AsyncWebServer(IPAddress ipAddr, uint16_t port);
     ~AsyncWebServer();
 
     void begin();
@@ -439,17 +449,16 @@ class AsyncWebServer {
 };
 
 class DefaultHeaders {
-  using headers_t = LinkedList<AsyncWebHeader *>;
+  using headers_t = std::list<AsyncWebHeader>;
   headers_t _headers;
-  
-  DefaultHeaders()
-  :_headers(headers_t([](AsyncWebHeader *h){ delete h; }))
-  {}
+
 public:
-  using ConstIterator = headers_t::ConstIterator;
+  DefaultHeaders() = default;
+
+  using ConstIterator = headers_t::const_iterator;
 
   void addHeader(const String& name, const String& value){
-    _headers.add(new AsyncWebHeader(name, value));
+    _headers.emplace_back(name, value);
   }  
   
   ConstIterator begin() const { return _headers.begin(); }
@@ -457,6 +466,7 @@ public:
 
   DefaultHeaders(DefaultHeaders const &) = delete;
   DefaultHeaders &operator=(DefaultHeaders const &) = delete;
+
   static DefaultHeaders &Instance() {
     static DefaultHeaders instance;
     return instance;
