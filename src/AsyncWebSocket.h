@@ -270,7 +270,7 @@ class AsyncWebSocket: public AsyncWebHandler {
     virtual bool canHandle(AsyncWebServerRequest *request) override final;
     virtual void handleRequest(AsyncWebServerRequest *request) override final;
 
-    const auto &getClients() const { return _clients; }
+    const std::vector<AsyncWebSocketClient*>& getClients() { return _clients; }
 };
 
 //WebServer response to authenticate the socket and detach the tcp client from the web server request
