@@ -286,11 +286,10 @@ AsyncWebSocketClient::AsyncWebSocketClient(AsyncWebServerRequest *request, Async
 AsyncWebSocketClient::~AsyncWebSocketClient()
 {
     if (asyncWebSocketDebug) Serial.printf("AsyncWebSocketClient::~AsyncWebSocketClient this=0x%llx task=0x%llx %s\r\n", uint64_t(this), uint64_t(xTaskGetCurrentTaskHandle()), pcTaskGetTaskName(xTaskGetCurrentTaskHandle()));
-
     {
         AsyncWebLockGuard l(_lock, "AsyncWebSocketClient::~AsyncWebSocketClient()");
-        _messageQueue = {};
-        _controlQueue = {};
+        _messageQueue = std::queue<AsyncWebSocketMessage>();
+		_controlQueue = std::queue<AsyncWebSocketControl>();
     }
     _server->_handleEvent(this, WS_EVT_DISCONNECT, NULL, NULL, 0);
 }

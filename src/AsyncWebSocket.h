@@ -24,7 +24,7 @@
 #include <Arduino.h>
 #ifdef ESP32
 #include <AsyncTCP.h>
-#define WS_MAX_QUEUED_MESSAGES 16
+#define WS_MAX_QUEUED_MESSAGES 1024
 #else
 #include <ESPAsyncTCP.h>
 #define WS_MAX_QUEUED_MESSAGES 8
@@ -270,7 +270,7 @@ class AsyncWebSocket: public AsyncWebHandler {
     virtual bool canHandle(AsyncWebServerRequest *request) override final;
     virtual void handleRequest(AsyncWebServerRequest *request) override final;
 
-    const std::vector<AsyncWebSocketClient*>& getClients() { return _clients; }
+    const std::list<AsyncWebSocketClient>& getClients() { return _clients; }
 };
 
 //WebServer response to authenticate the socket and detach the tcp client from the web server request
